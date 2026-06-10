@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_floating_ai"
+    android:padding="12dp"
+    android:elevation="15dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🎯 AI Aim Pro"
+        android:textColor="#FFD700"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp"/>
+
+    <Button
+        android:id="@+id/btnAnalyze"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:text="🤖 AI Analyze (Best Shot)"
+        android:textSize="12sp"
+        android:background="@android:color/holo_green_dark"
+        android:textColor="#FFFFFF"
+        android:layout_marginBottom="8dp"/>
+
+    <Button
+        android:id="@+id/btnSetWhite"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="⚪ تعيين البيضاء يدوياً"
+        android:textSize="12sp"
+        style="@style/Widget.Material3.Button.TextButton"/>
+
+    <Button
+        android:id="@+id/btnSetTarget"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="🎯 تعيين الهدف يدوياً"
+        android:textSize="12sp"
+        style="@style/Widget.Material3.Button.TextButton"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginTop="8dp">
+
+        <Button
+            android:id="@+id/btnMinus"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:text="-"
+            style="@style/Widget.Material3.Button.OutlinedButton"/>
+
+        <TextView
+            android:id="@+id/txtThick"
+            android:layout_width="50dp"
+            android:layout_height="wrap_content"
+            android:text="سمك 4"
+            android:textColor="#FFD700"
+            android:gravity="center"/>
+
+        <Button
+            android:id="@+id/btnPlus"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:text="+"
+            style="@style/Widget.Material3.Button.OutlinedButton"/>
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/btnClose"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="❌ إغلاق"
+        android:textSize="12sp"
+        android:background="@android:color/holo_red_dark"
+        android:textColor="#FFFFFF"
+        android:layout_marginTop="12dp"/>
+</LinearLayout>
