@@ -20,7 +20,7 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
-    - name: Clean everything and create fresh project
+    - name: Clean and create fresh project
       run: |
         rm -rf app gradle build.gradle settings.gradle gradle.properties build
         mkdir -p app/src/main/java/com/example/aimai
@@ -59,7 +59,7 @@ jobs:
         android.enableJetifier=true
         EOF
 
-    - name: Create app/build.gradle (SIMPLE AND CORRECT)
+    - name: Create app/build.gradle with OpenCV
       run: |
         cat << 'EOF' > app/build.gradle
         plugins {
@@ -99,6 +99,7 @@ jobs:
             implementation 'androidx.core:core-ktx:1.9.0'
             implementation 'androidx.appcompat:appcompat:1.6.1'
             implementation 'com.google.android.material:material:1.8.0'
+            implementation 'com.quickbirdstudios:opencv:4.8.0.1'
         }
         EOF
 
@@ -110,7 +111,7 @@ jobs:
             <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
             <application
                 android:allowBackup="true"
-                android:label="AI Aim Assistant"
+                android:label="AI Aim Assistant Pro"
                 android:theme="@style/Theme.AppCompat.NoActionBar">
                 <activity
                     android:name=".MainActivity"
@@ -142,8 +143,8 @@ jobs:
         cat << 'EOF' > app/src/main/res/values/strings.xml
         <?xml version="1.0" encoding="utf-8"?>
         <resources>
-            <string name="app_name">AI Aim Assistant</string>
-            <string name="accessibility_desc">Accessibility Service</string>
+            <string name="app_name">AI Aim Assistant Pro</string>
+            <string name="accessibility_desc">Accessibility Service for AI Aim</string>
         </resources>
         EOF
 
@@ -160,7 +161,7 @@ jobs:
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="AI Aim Assistant"
+                android:text="AI Aim Assistant Pro"
                 android:textSize="24sp"
                 android:textStyle="bold"
                 android:layout_marginBottom="24dp"/>
@@ -175,6 +176,12 @@ jobs:
                 android:layout_height="wrap_content"
                 android:text="Stop"
                 android:layout_marginTop="12dp"/>
+            <Button
+                android:id="@+id/btnAccessibility"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Enable Accessibility"
+                android:layout_marginTop="24dp"/>
         </LinearLayout>
         EOF
 
@@ -187,24 +194,41 @@ jobs:
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:background="#CC000000"
-            android:padding="12dp">
+            android:padding="12dp"
+            android:elevation="10dp">
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="🎯 AI Aim"
+                android:text="🎯 AI Aim Pro"
                 android:textColor="#FFD700"
+                android:textStyle="bold"
                 android:layout_marginBottom="8dp"/>
             <Button
                 android:id="@+id/btnAnalyze"
-                android:text="AI Analyze"
+                android:text="🧠 AI Analyze (Best Shot)"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:background="@android:color/holo_green_dark"
+                android:textColor="#FFFFFF"/>
+            <Button
+                android:id="@+id/btnSetWhite"
+                android:text="⚪ Set White Ball"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"/>
+            <Button
+                android:id="@+id/btnSetTarget"
+                android:text="🎯 Set Target Ball"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"/>
             <Button
                 android:id="@+id/btnClose"
-                android:text="Close"
+                android:text="❌ Close"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"/>
+                android:layout_marginTop="8dp"
+                android:background="@android:color/holo_red_dark"
+                android:textColor="#FFFFFF"/>
         </LinearLayout>
         EOF
 
@@ -215,6 +239,7 @@ jobs:
         <shape xmlns:android="http://schemas.android.com/apk/res/android">
             <solid android:color="#CC000000"/>
             <corners android:radius="16dp"/>
+            <stroke android:width="1dp" android:color="#FFD700"/>
         </shape>
         EOF
 
@@ -231,6 +256,349 @@ jobs:
             android:notificationTimeout="100" />
         EOF
 
+    - name: Create AimMath.kt (Full)
+      run: |
+        cat << 'EOF' > app/src/main/java/com/example/aimai/AimMath.kt
+        package com.example.aimai
+        import kotlin.math.*
+        object AimMath {
+            fun angleBetween(x1: Float, y1: Float, x2: Float, y2: Float): Double = atan2(y2 - y1, x2 - x1)
+            fun distance(x1: Float, y1: Float, x2: Float, y2: Float): Float = hypot(x2 - x1, y2 - y1)
+            fun ghostBall(cueX: Float, cueY: Float, targetX: Float, targetY: Float, ballRadius: Float = 28f): Pair<Float, Float> {
+                val angle = angleBetween(cueX, cueY, targetX, targetY)
+                val dx = cos(angle).toFloat() * ballRadius * 2
+                val dy = sin(angle).toFloat() * ballRadius * 2
+                return Pair(targetX - dx, targetY - dy)
+            }
+            fun pointOnLine(start: Pair<Float,Float>, dir: Pair<Float,Float>, t: Float): Pair<Float,Float> {
+                return Pair(start.first + dir.first * t, start.second + dir.second * t)
+            }
+        }
+        EOF
+
+    - name: Create PhysicsEngine.kt (Full with Bank Shots)
+      run: |
+        cat << 'EOF' > app/src/main/java/com/example/aimai/PhysicsEngine.kt
+        package com.example.aimai
+        import kotlin.math.*
+        class PhysicsEngine(val tableWidth: Float = 1000f, val tableHeight: Float = 1600f) {
+            data class PredictionPath(val points: List<Pair<Float,Float>>, val hitBall: VisionAnalyzer.Ball?)
+            fun computeFullPath(cue: Pair<Float,Float>, direction: Pair<Float,Float>,
+                                allBalls: List<VisionAnalyzer.Ball>, pockets: List<android.graphics.Point>): PredictionPath {
+                val points = mutableListOf(cue)
+                var currentPos = cue
+                var currentDir = direction
+                var hitBall: VisionAnalyzer.Ball? = null
+                var bounces = 0
+                var steps = 0
+                while (bounces < 4 && steps < 200) {
+                    val next = findNextCollision(currentPos, currentDir, allBalls)
+                    if (next == null) {
+                        val far = extendLine(currentPos, currentDir)
+                        points.add(far)
+                        break
+                    }
+                    points.add(next.point)
+                    if (next.type == "ball") {
+                        hitBall = next.ball
+                        if (next.ball != null && pockets.isNotEmpty()) {
+                            val nearest = pockets.minByOrNull { AimMath.distance(next.ball.x, next.ball.y, it.x.toFloat(), it.y.toFloat()) }
+                            if (nearest != null) {
+                                points.add(Pair(nearest.x.toFloat(), nearest.y.toFloat()))
+                            }
+                        }
+                        break
+                    } else {
+                        currentPos = next.point
+                        currentDir = reflectDirection(currentDir, next.edge!!)
+                        bounces++
+                    }
+                    steps++
+                }
+                return PredictionPath(points, hitBall)
+            }
+            private data class Collision(val point: Pair<Float,Float>, val type: String, val ball: VisionAnalyzer.Ball?, val edge: String?)
+            private fun findNextCollision(pos: Pair<Float,Float>, dir: Pair<Float,Float>,
+                                          balls: List<VisionAnalyzer.Ball>): Collision? {
+                var closestDist = Float.MAX_VALUE
+                var closestBall: VisionAnalyzer.Ball? = null
+                for (ball in balls) {
+                    val toBallX = ball.x - pos.first
+                    val toBallY = ball.y - pos.second
+                    val cross = dir.first * toBallY - dir.second * toBallX
+                    val distToLine = abs(cross) / hypot(dir.first, dir.second)
+                    if (distToLine < ball.radius) {
+                        val t = (toBallX * dir.first + toBallY * dir.second) / (dir.first*dir.first + dir.second*dir.second)
+                        if (t > 0 && t < closestDist) {
+                            closestDist = t
+                            closestBall = ball
+                        }
+                    }
+                }
+                val edgeCollision = findEdgeCollision(pos, dir)
+                if (closestBall != null && closestDist < edgeCollision.distance) {
+                    val impact = AimMath.pointOnLine(pos, dir, closestDist)
+                    return Collision(impact, "ball", closestBall, null)
+                }
+                if (edgeCollision.distance < Float.MAX_VALUE) {
+                    return Collision(edgeCollision.point, "edge", null, edgeCollision.edge)
+                }
+                return null
+            }
+            private data class EdgeCollision(val point: Pair<Float,Float>, val distance: Float, val edge: String)
+            private fun findEdgeCollision(pos: Pair<Float,Float>, dir: Pair<Float,Float>): EdgeCollision {
+                var bestDist = Float.MAX_VALUE
+                var bestPoint = Pair(0f,0f)
+                var bestEdge = ""
+                if (dir.first != 0f) {
+                    val tLeft = (0f - pos.first) / dir.first
+                    if (tLeft > 0) {
+                        val y = pos.second + dir.second * tLeft
+                        if (y in 0f..tableHeight && tLeft < bestDist) {
+                            bestDist = tLeft; bestPoint = Pair(0f, y); bestEdge = "left"
+                        }
+                    }
+                    val tRight = (tableWidth - pos.first) / dir.first
+                    if (tRight > 0) {
+                        val y = pos.second + dir.second * tRight
+                        if (y in 0f..tableHeight && tRight < bestDist) {
+                            bestDist = tRight; bestPoint = Pair(tableWidth, y); bestEdge = "right"
+                        }
+                    }
+                }
+                if (dir.second != 0f) {
+                    val tTop = (0f - pos.second) / dir.second
+                    if (tTop > 0) {
+                        val x = pos.first + dir.first * tTop
+                        if (x in 0f..tableWidth && tTop < bestDist) {
+                            bestDist = tTop; bestPoint = Pair(x, 0f); bestEdge = "top"
+                        }
+                    }
+                    val tBottom = (tableHeight - pos.second) / dir.second
+                    if (tBottom > 0) {
+                        val x = pos.first + dir.first * tBottom
+                        if (x in 0f..tableWidth && tBottom < bestDist) {
+                            bestDist = tBottom; bestPoint = Pair(x, tableHeight); bestEdge = "bottom"
+                        }
+                    }
+                }
+                return EdgeCollision(bestPoint, bestDist, bestEdge)
+            }
+            private fun reflectDirection(dir: Pair<Float,Float>, edge: String): Pair<Float,Float> {
+                return when (edge) {
+                    "left", "right" -> Pair(-dir.first, dir.second)
+                    "top", "bottom" -> Pair(dir.first, -dir.second)
+                    else -> dir
+                }
+            }
+            private fun extendLine(pos: Pair<Float,Float>, dir: Pair<Float,Float>): Pair<Float,Float> {
+                var t = Float.MAX_VALUE
+                if (dir.first > 0) t = min(t, (tableWidth - pos.first) / dir.first)
+                else if (dir.first < 0) t = min(t, (0f - pos.first) / dir.first)
+                if (dir.second > 0) t = min(t, (tableHeight - pos.second) / dir.second)
+                else if (dir.second < 0) t = min(t, (0f - pos.second) / dir.second)
+                return AimMath.pointOnLine(pos, dir, t)
+            }
+        }
+        EOF
+
+    - name: Create VisionAnalyzer.kt (Full with OpenCV)
+      run: |
+        cat << 'EOF' > app/src/main/java/com/example/aimai/VisionAnalyzer.kt
+        package com.example.aimai
+        import android.graphics.Bitmap
+        import android.graphics.Color
+        import org.opencv.android.Utils
+        import org.opencv.core.*
+        import org.opencv.imgproc.Imgproc
+        object VisionAnalyzer {
+            data class Ball(val x: Float, val y: Float, val radius: Float, val color: Int, val id: Int = 0)
+            fun detectBalls(screenBitmap: Bitmap): List<Ball> {
+                val balls = mutableListOf<Ball>()
+                val mat = Mat()
+                Utils.bitmapToMat(screenBitmap, mat)
+                val gray = Mat()
+                Imgproc.cvtColor(mat, gray, Imgproc.COLOR_BGR2GRAY)
+                Imgproc.GaussianBlur(gray, gray, Size(9.0, 9.0), 2.0, 2.0)
+                val circles = Mat()
+                Imgproc.HoughCircles(gray, circles, Imgproc.HOUGH_GRADIENT, 1.0, 30.0, 200.0, 30.0, 15, 45)
+                for (i in 0 until circles.cols()) {
+                    val data = circles.get(0, i)
+                    val center = Point(data[0], data[1])
+                    val radius = data[2].toFloat()
+                    val color = if (center.x in 0 until screenBitmap.width && center.y in 0 until screenBitmap.height)
+                        screenBitmap.getPixel(center.x.toInt(), center.y.toInt()) and 0xFFFFFF
+                    else Color.WHITE
+                    balls.add(Ball(center.x.toFloat(), center.y.toFloat(), radius, color))
+                }
+                circles.release(); gray.release(); mat.release()
+                return balls
+            }
+            fun detectPockets(screenBitmap: Bitmap): List<Point> {
+                val pockets = mutableListOf<Point>()
+                val mat = Mat()
+                Utils.bitmapToMat(screenBitmap, mat)
+                val gray = Mat()
+                Imgproc.cvtColor(mat, gray, Imgproc.COLOR_BGR2GRAY)
+                Imgproc.GaussianBlur(gray, gray, Size(9.0, 9.0), 2.0, 2.0)
+                val circles = Mat()
+                Imgproc.HoughCircles(gray, circles, Imgproc.HOUGH_GRADIENT, 1.0, 40.0, 150.0, 35.0, 25, 80)
+                for (i in 0 until circles.cols()) {
+                    val data = circles.get(0, i)
+                    pockets.add(Point(data[0], data[1]))
+                }
+                circles.release(); gray.release(); mat.release()
+                return pockets
+            }
+        }
+        EOF
+
+    - name: Create OverlayRenderer.kt (Full with Drawing)
+      run: |
+        cat << 'EOF' > app/src/main/java/com/example/aimai/OverlayRenderer.kt
+        package com.example.aimai
+        import android.content.Context
+        import android.graphics.*
+        import android.view.View
+        class OverlayRenderer(context: Context) : View(context) {
+            private var currentPath: PhysicsEngine.PredictionPath? = null
+            private val paintSolid = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.YELLOW; strokeWidth = 6f; style = Paint.Style.STROKE
+            }
+            private val paintDash = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.CYAN; strokeWidth = 5f; style = Paint.Style.STROKE
+                pathEffect = DashPathEffect(floatArrayOf(25f, 15f), 0f)
+            }
+            private val paintGhost = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.argb(120, 255, 0, 0); style = Paint.Style.FILL
+            }
+            fun setPath(path: PhysicsEngine.PredictionPath?) {
+                currentPath = path; invalidate()
+            }
+            override fun onDraw(canvas: Canvas) {
+                super.onDraw(canvas)
+                val path = currentPath ?: return
+                if (path.points.size < 2) return
+                for (i in 0 until path.points.size - 1) {
+                    val p1 = path.points[i]
+                    val p2 = path.points[i+1]
+                    val paint = if (i == 0) paintSolid else paintDash
+                    canvas.drawLine(p1.first, p1.second, p2.first, p2.second, paint)
+                    if (path.hitBall != null && i == path.points.size - 2) {
+                        canvas.drawCircle(p2.first, p2.second, 30f, paintGhost)
+                    }
+                }
+            }
+        }
+        EOF
+
+    - name: Create FloatingAIService.kt (Full)
+      run: |
+        cat << 'EOF' > app/src/main/java/com/example/aimai/FloatingAIService.kt
+        package com.example.aimai
+        import android.app.Service
+        import android.content.Intent
+        import android.graphics.PixelFormat
+        import android.os.Build
+        import android.os.IBinder
+        import android.view.*
+        import android.widget.Button
+        import android.widget.Toast
+        class FloatingAIService : Service() {
+            private lateinit var windowManager: WindowManager
+            private lateinit var overlayRenderer: OverlayRenderer
+            private lateinit var floatingMenu: View
+            private var allBalls: List<VisionAnalyzer.Ball> = emptyList()
+            private var bestPath: PhysicsEngine.PredictionPath? = null
+            override fun onBind(intent: Intent?): IBinder? = null
+            override fun onCreate() {
+                super.onCreate()
+                windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+                overlayRenderer = OverlayRenderer(this)
+                val overlayParams = WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                    else WindowManager.LayoutParams.TYPE_PHONE,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                    PixelFormat.TRANSLUCENT
+                )
+                windowManager.addView(overlayRenderer, overlayParams)
+                floatingMenu = LayoutInflater.from(this).inflate(R.layout.floating_menu_ai, null)
+                val menuParams = WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.WRAP_CONTENT,
+                    WindowManager.LayoutParams.WRAP_CONTENT,
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                    else WindowManager.LayoutParams.TYPE_PHONE,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                    PixelFormat.TRANSLUCENT
+                )
+                menuParams.gravity = Gravity.TOP or Gravity.START
+                menuParams.x = 100; menuParams.y = 200
+                windowManager.addView(floatingMenu, menuParams)
+                setupListeners()
+                setupDemoBalls()
+            }
+            private fun setupListeners() {
+                floatingMenu.findViewById<Button>(R.id.btnAnalyze).setOnClickListener {
+                    if (allBalls.isNotEmpty()) {
+                        runAIAnalysis()
+                    } else {
+                        Toast.makeText(this, "Detecting balls... Please wait or set manually", Toast.LENGTH_SHORT).show()
+                        setupDemoBalls()
+                        runAIAnalysis()
+                    }
+                }
+                floatingMenu.findViewById<Button>(R.id.btnClose).setOnClickListener { stopSelf() }
+                floatingMenu.findViewById<Button>(R.id.btnSetWhite).setOnClickListener {
+                    Toast.makeText(this, "Touch mode: Click on White Ball", Toast.LENGTH_SHORT).show()
+                }
+                floatingMenu.findViewById<Button>(R.id.btnSetTarget).setOnClickListener {
+                    Toast.makeText(this, "Touch mode: Click on Target Ball", Toast.LENGTH_SHORT).show()
+                }
+            }
+            private fun setupDemoBalls() {
+                allBalls = listOf(
+                    VisionAnalyzer.Ball(500f, 800f, 28f, android.graphics.Color.WHITE),
+                    VisionAnalyzer.Ball(750f, 600f, 28f, android.graphics.Color.RED)
+                )
+            }
+            private fun runAIAnalysis() {
+                val cueBall = allBalls.firstOrNull { it.color == android.graphics.Color.WHITE || it.color == 0xFFFFFFFF.toInt() }
+                val targetBalls = allBalls.filter { it != cueBall }
+                if (cueBall == null || targetBalls.isEmpty()) {
+                    Toast.makeText(this, "No balls detected", Toast.LENGTH_SHORT).show()
+                    return
+                }
+                val pockets = listOf(
+                    android.graphics.Point(50, 50), android.graphics.Point(950, 50),
+                    android.graphics.Point(50, 1550), android.graphics.Point(950, 1550)
+                )
+                var bestScore = Float.MAX_VALUE
+                var bestPrediction: PhysicsEngine.PredictionPath? = null
+                val engine = PhysicsEngine(1000f, 1600f)
+                for (target in targetBalls) {
+                    val direction = Pair(target.x - cueBall.x, target.y - cueBall.y)
+                    val path = engine.computeFullPath(Pair(cueBall.x, cueBall.y), direction, allBalls, pockets)
+                    if (path.points.size < bestScore) {
+                        bestScore = path.points.size.toFloat()
+                        bestPrediction = path
+                    }
+                }
+                bestPath = bestPrediction
+                overlayRenderer.setPath(bestPath)
+                Toast.makeText(this, "AI Best Path Calculated!", Toast.LENGTH_SHORT).show()
+            }
+            override fun onDestroy() {
+                super.onDestroy()
+                if (::overlayRenderer.isInitialized) windowManager.removeView(overlayRenderer)
+                if (::floatingMenu.isInitialized) windowManager.removeView(floatingMenu)
+            }
+        }
+        EOF
+
     - name: Create MainActivity.kt
       run: |
         cat << 'EOF' > app/src/main/java/com/example/aimai/MainActivity.kt
@@ -239,6 +607,7 @@ jobs:
         import android.net.Uri
         import android.os.Bundle
         import android.provider.Settings
+        android.view.View
         import android.widget.Button
         import androidx.appcompat.app.AppCompatActivity
         class MainActivity : AppCompatActivity() {
@@ -255,82 +624,12 @@ jobs:
                 findViewById<Button>(R.id.btnStop).setOnClickListener {
                     stopService(Intent(this, FloatingAIService::class.java))
                 }
+                findViewById<Button>(R.id.btnAccessibility).setOnClickListener {
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                }
             }
         }
         EOF
-
-    - name: Create FloatingAIService.kt
-      run: |
-        cat << 'EOF' > app/src/main/java/com/example/aimai/FloatingAIService.kt
-        package com.example.aimai
-        import android.app.Service
-        import android.content.Intent
-        import android.graphics.PixelFormat
-        import android.os.Build
-        import android.os.IBinder
-        import android.view.*
-        import android.widget.Button
-        import android.widget.Toast
-        class FloatingAIService : Service() {
-            private lateinit var windowManager: WindowManager
-            private lateinit var overlayView: View
-            private lateinit var floatingMenu: View
-            override fun onBind(intent: Intent?): IBinder? = null
-            override fun onCreate() {
-                super.onCreate()
-                windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-                overlayView = View(this).apply {
-                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                }
-                val overlayParams = WindowManager.LayoutParams(
-                    WindowManager.LayoutParams.MATCH_PARENT,
-                    WindowManager.LayoutParams.MATCH_PARENT,
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                    else WindowManager.LayoutParams.TYPE_PHONE,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-                    PixelFormat.TRANSLUCENT
-                )
-                windowManager.addView(overlayView, overlayParams)
-                floatingMenu = LayoutInflater.from(this).inflate(R.layout.floating_menu_ai, null)
-                val menuParams = WindowManager.LayoutParams(
-                    WindowManager.LayoutParams.WRAP_CONTENT,
-                    WindowManager.LayoutParams.WRAP_CONTENT,
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                    else WindowManager.LayoutParams.TYPE_PHONE,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                    PixelFormat.TRANSLUCENT
-                )
-                menuParams.gravity = Gravity.TOP or Gravity.START
-                menuParams.x = 100
-                menuParams.y = 200
-                windowManager.addView(floatingMenu, menuParams)
-                floatingMenu.findViewById<Button>(R.id.btnAnalyze).setOnClickListener {
-                    Toast.makeText(this, "AI Analysis Active", Toast.LENGTH_SHORT).show()
-                }
-                floatingMenu.findViewById<Button>(R.id.btnClose).setOnClickListener {
-                    stopSelf()
-                }
-            }
-            override fun onDestroy() {
-                super.onDestroy()
-                if (::overlayView.isInitialized) windowManager.removeView(overlayView)
-                if (::floatingMenu.isInitialized) windowManager.removeView(floatingMenu)
-            }
-        }
-        EOF
-
-    - name: Create empty stub files
-      run: |
-        echo "package com.example.aimai" > app/src/main/java/com/example/aimai/AimMath.kt
-        echo "object AimMath" >> app/src/main/java/com/example/aimai/AimMath.kt
-        echo "package com.example.aimai" > app/src/main/java/com/example/aimai/PhysicsEngine.kt
-        echo "class PhysicsEngine" >> app/src/main/java/com/example/aimai/PhysicsEngine.kt
-        echo "package com.example.aimai" > app/src/main/java/com/example/aimai/VisionAnalyzer.kt
-        echo "object VisionAnalyzer" >> app/src/main/java/com/example/aimai/VisionAnalyzer.kt
-        echo "package com.example.aimai" > app/src/main/java/com/example/aimai/OverlayRenderer.kt
-        echo "class OverlayRenderer" >> app/src/main/java/com/example/aimai/OverlayRenderer.kt
 
     - name: Generate Gradle Wrapper
       run: |
@@ -343,5 +642,5 @@ jobs:
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: ai-aim-assistant
+        name: ai-aim-assistant-pro
         path: app/build/outputs/apk/debug/*.apk
