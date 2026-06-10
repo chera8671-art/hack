@@ -20,16 +20,16 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
-    - name: Clean and create full project
+    - name: Create full Android project
       run: |
-        rm -rf app gradle build.gradle settings.gradle gradle.properties build
+        rm -rf app gradle build.gradle settings.gradle gradle.properties .gradle
         mkdir -p app/src/main/java/com/example/aimai
         mkdir -p app/src/main/res/layout
         mkdir -p app/src/main/res/values
         mkdir -p app/src/main/res/drawable
         mkdir -p app/src/main/res/xml
 
-    - name: Create root build.gradle (FIXED)
+    - name: Create root build.gradle
       run: |
         cat << 'EOF' > build.gradle
         buildscript {
@@ -64,10 +64,9 @@ jobs:
         org.gradle.jvmargs=-Xmx2048m
         android.useAndroidX=true
         android.enableJetifier=true
-        kotlin.code.style=official
         EOF
 
-    - name: Create app/build.gradle (FIXED - WITHOUT OpenCV conflict)
+    - name: Create app/build.gradle
       run: |
         cat << 'EOF' > app/build.gradle
         apply plugin: 'com.android.application'
@@ -116,7 +115,7 @@ jobs:
             <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
             <application
                 android:allowBackup="true"
-                android:label="AI Aim Assistant Pro"
+                android:label="🎯 AI Aim Pro"
                 android:theme="@style/Theme.AppCompat.NoActionBar">
                 <activity
                     android:name=".MainActivity"
@@ -136,7 +135,6 @@ jobs:
     - name: Create colors.xml
       run: |
         cat << 'EOF' > app/src/main/res/values/colors.xml
-        <?xml version="1.0" encoding="utf-8"?>
         <resources>
             <color name="black">#FF000000</color>
             <color name="white">#FFFFFFFF</color>
@@ -146,54 +144,31 @@ jobs:
     - name: Create strings.xml
       run: |
         cat << 'EOF' > app/src/main/res/values/strings.xml
-        <?xml version="1.0" encoding="utf-8"?>
         <resources>
-            <string name="app_name">AI Aim Assistant Pro</string>
-            <string name="accessibility_desc">Accessibility Service</string>
+            <string name="app_name">AI Aim Pro</string>
+            <string name="accessibility_desc">AI Aim Service</string>
         </resources>
         EOF
 
     - name: Create activity_main.xml
       run: |
         cat << 'EOF' > app/src/main/res/layout/activity_main.xml
-        <?xml version="1.0" encoding="utf-8"?>
         <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:orientation="vertical"
             android:gravity="center"
             android:padding="16dp">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="AI Aim Assistant Pro"
-                android:textSize="24sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="24dp"/>
-            <Button
-                android:id="@+id/btnStart"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Start AI Assistant"/>
-            <Button
-                android:id="@+id/btnStop"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Stop"
-                android:layout_marginTop="12dp"/>
-            <Button
-                android:id="@+id/btnAccessibility"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Enable Accessibility"
-                android:layout_marginTop="24dp"/>
+            <TextView android:text="🎯 AI Aim Pro" android:textSize="24sp" android:textStyle="bold" android:layout_marginBottom="24dp"/>
+            <Button android:id="@+id/btnStart" android:text="Start AI Assistant" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+            <Button android:id="@+id/btnStop" android:text="Stop" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp"/>
+            <Button android:id="@+id/btnAccessibility" android:text="Enable Accessibility" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="24dp"/>
         </LinearLayout>
         EOF
 
     - name: Create floating_menu_ai.xml
       run: |
         cat << 'EOF' > app/src/main/res/layout/floating_menu_ai.xml
-        <?xml version="1.0" encoding="utf-8"?>
         <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -201,46 +176,17 @@ jobs:
             android:background="#CC000000"
             android:padding="12dp"
             android:elevation="10dp">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="🎯 AI Aim Pro"
-                android:textColor="#FFD700"
-                android:textStyle="bold"
-                android:layout_marginBottom="8dp"/>
-            <Button
-                android:id="@+id/btnAnalyze"
-                android:text="🧠 AI Analyze (Best Shot)"
-                android:layout_width="wrap_content"
-                android:layout_height="40dp"
-                android:background="@android:color/holo_green_dark"
-                android:textColor="#FFFFFF"/>
-            <Button
-                android:id="@+id/btnSetWhite"
-                android:text="⚪ Set White Ball"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"/>
-            <Button
-                android:id="@+id/btnSetTarget"
-                android:text="🎯 Set Target Ball"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"/>
-            <Button
-                android:id="@+id/btnClose"
-                android:text="❌ Close"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="@android:color/holo_red_dark"
-                android:textColor="#FFFFFF"/>
+            <TextView android:text="🎯 AI Aim Pro" android:textColor="#FFD700" android:textStyle="bold" android:layout_marginBottom="8dp"/>
+            <Button android:id="@+id/btnAnalyze" android:text="🧠 AI Analyze" android:layout_width="wrap_content" android:layout_height="40dp" android:background="@android:color/holo_green_dark" android:textColor="#FFFFFF"/>
+            <Button android:id="@+id/btnSetWhite" android:text="⚪ Set White" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp"/>
+            <Button android:id="@+id/btnSetTarget" android:text="🎯 Set Target" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+            <Button android:id="@+id/btnClose" android:text="❌ Close" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@android:color/holo_red_dark" android:textColor="#FFFFFF"/>
         </LinearLayout>
         EOF
 
     - name: Create bg_floating_ai.xml
       run: |
         cat << 'EOF' > app/src/main/res/drawable/bg_floating_ai.xml
-        <?xml version="1.0" encoding="utf-8"?>
         <shape xmlns:android="http://schemas.android.com/apk/res/android">
             <solid android:color="#CC000000"/>
             <corners android:radius="16dp"/>
@@ -251,7 +197,6 @@ jobs:
     - name: Create accessibility_service_config.xml
       run: |
         cat << 'EOF' > app/src/main/res/xml/accessibility_service_config.xml
-        <?xml version="1.0" encoding="utf-8"?>
         <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
             android:accessibilityEventTypes="typeAllMask"
             android:accessibilityFeedbackType="feedbackGeneric"
@@ -560,7 +505,8 @@ jobs:
                     }
                 }
                 overlayRenderer.setPath(bestPrediction)
-                Toast.makeText(this, "AI Best Path! Bounces: ${bestPrediction?.points?.size?.minus(1)}", Toast.LENGTH_LONG).show()
+                val bounceCount = bestPrediction?.points?.size?.minus(1) ?: 0
+                Toast.makeText(this, "✅ AI Best Path! $bounceCount bounces", Toast.LENGTH_LONG).show()
             }
             override fun onDestroy() {
                 super.onDestroy()
@@ -612,5 +558,5 @@ jobs:
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: ai-aim-assistant-pro
+        name: ai-aim-pro
         path: app/build/outputs/apk/debug/*.apk
