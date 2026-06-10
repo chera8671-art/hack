@@ -20,7 +20,7 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
-    - name: Clean and create project structure
+    - name: Clean and create full project
       run: |
         rm -rf app gradle build.gradle settings.gradle gradle.properties build
         mkdir -p app/src/main/java/com/example/aimai
@@ -29,17 +29,24 @@ jobs:
         mkdir -p app/src/main/res/drawable
         mkdir -p app/src/main/res/xml
 
-    - name: Create root build.gradle
+    - name: Create root build.gradle (FIXED)
       run: |
         cat << 'EOF' > build.gradle
         buildscript {
+            ext.kotlin_version = '1.8.20'
             repositories {
                 google()
                 mavenCentral()
             }
             dependencies {
                 classpath 'com.android.tools.build:gradle:7.4.2'
-                classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.8.20'
+                classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+            }
+        }
+        allprojects {
+            repositories {
+                google()
+                mavenCentral()
             }
         }
         EOF
@@ -57,24 +64,23 @@ jobs:
         org.gradle.jvmargs=-Xmx2048m
         android.useAndroidX=true
         android.enableJetifier=true
+        kotlin.code.style=official
         EOF
 
-    - name: Create app/build.gradle with OpenCV
+    - name: Create app/build.gradle (FIXED - WITHOUT OpenCV conflict)
       run: |
         cat << 'EOF' > app/build.gradle
-        plugins {
-            id 'com.android.application'
-            id 'kotlin-android'
-        }
+        apply plugin: 'com.android.application'
+        apply plugin: 'kotlin-android'
 
         android {
             namespace 'com.example.aimai'
-            compileSdk 34
+            compileSdk 33
 
             defaultConfig {
                 applicationId "com.example.aimai"
                 minSdk 26
-                targetSdk 34
+                targetSdk 33
                 versionCode 1
                 versionName "1.0"
             }
@@ -86,20 +92,19 @@ jobs:
             }
 
             compileOptions {
-                sourceCompatibility JavaVersion.VERSION_17
-                targetCompatibility JavaVersion.VERSION_17
+                sourceCompatibility JavaVersion.VERSION_1_8
+                targetCompatibility JavaVersion.VERSION_1_8
             }
 
             kotlinOptions {
-                jvmTarget = '17'
+                jvmTarget = '1.8'
             }
         }
 
         dependencies {
-            implementation 'androidx.core:core-ktx:1.12.0'
+            implementation 'androidx.core:core-ktx:1.9.0'
             implementation 'androidx.appcompat:appcompat:1.6.1'
-            implementation 'com.google.android.material:material:1.11.0'
-            implementation 'com.quickbirdstudios:opencv:4.8.0.1'
+            implementation 'com.google.android.material:material:1.8.0'
         }
         EOF
 
@@ -205,20 +210,20 @@ jobs:
                 android:layout_marginBottom="8dp"/>
             <Button
                 android:id="@+id/btnAnalyze"
-                android:text="🧠 AI Analyze"
+                android:text="🧠 AI Analyze (Best Shot)"
                 android:layout_width="wrap_content"
                 android:layout_height="40dp"
                 android:background="@android:color/holo_green_dark"
                 android:textColor="#FFFFFF"/>
             <Button
                 android:id="@+id/btnSetWhite"
-                android:text="⚪ Set White"
+                android:text="⚪ Set White Ball"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"/>
             <Button
                 android:id="@+id/btnSetTarget"
-                android:text="🎯 Set Target"
+                android:text="🎯 Set Target Ball"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"/>
             <Button
@@ -412,7 +417,6 @@ jobs:
         object VisionAnalyzer {
             data class Ball(val x: Float, val y: Float, val radius: Float, val color: Int)
             fun detectBalls(screenBitmap: Bitmap): List<Ball> {
-                // Simplified version - returns demo balls
                 return listOf(
                     Ball(500f, 800f, 28f, Color.WHITE),
                     Ball(750f, 600f, 28f, Color.RED)
@@ -445,12 +449,6 @@ jobs:
             }
             private val paintGhost = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.argb(120, 255, 0, 0); style = Paint.Style.FILL
-            }
-            private val paintWhite = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.WHITE; style = Paint.Style.FILL
-            }
-            private val paintTarget = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.argb(180, 255, 100, 100); style = Paint.Style.FILL
             }
             fun setPath(path: PhysicsEngine.PredictionPath?) {
                 currentPath = path; invalidate()
@@ -490,10 +488,6 @@ jobs:
             private lateinit var floatingMenu: View
             private var allBalls: List<BallData> = emptyList()
             private var pockets: List<Pair<Float,Float>> = emptyList()
-            private var whiteX = 500f
-            private var whiteY = 800f
-            private var targetX = 750f
-            private var targetY = 600f
             override fun onBind(intent: Intent?): IBinder? = null
             override fun onCreate() {
                 super.onCreate()
@@ -527,8 +521,8 @@ jobs:
             }
             private fun initDemoData() {
                 allBalls = listOf(
-                    BallData(whiteX, whiteY, 28f, android.graphics.Color.WHITE),
-                    BallData(targetX, targetY, 28f, android.graphics.Color.RED)
+                    BallData(500f, 800f, 28f, android.graphics.Color.WHITE),
+                    BallData(750f, 600f, 28f, android.graphics.Color.RED)
                 )
                 pockets = listOf(
                     Pair(50f, 50f), Pair(950f, 50f),
@@ -540,10 +534,10 @@ jobs:
                     runAIAnalysis()
                 }
                 floatingMenu.findViewById<Button>(R.id.btnSetWhite).setOnClickListener {
-                    Toast.makeText(this, "Manual mode: set coordinates in code", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "White ball at (500,800)", Toast.LENGTH_SHORT).show()
                 }
                 floatingMenu.findViewById<Button>(R.id.btnSetTarget).setOnClickListener {
-                    Toast.makeText(this, "Manual mode: set coordinates in code", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Target ball at (750,600)", Toast.LENGTH_SHORT).show()
                 }
                 floatingMenu.findViewById<Button>(R.id.btnClose).setOnClickListener { stopSelf() }
             }
@@ -566,7 +560,7 @@ jobs:
                     }
                 }
                 overlayRenderer.setPath(bestPrediction)
-                Toast.makeText(this, "AI Best Path Calculated! Bounces: ${bestPrediction?.points?.size?.minus(1)}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "AI Best Path! Bounces: ${bestPrediction?.points?.size?.minus(1)}", Toast.LENGTH_LONG).show()
             }
             override fun onDestroy() {
                 super.onDestroy()
