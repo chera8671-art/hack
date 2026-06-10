@@ -1,4 +1,4 @@
-name: Build APK
+name: Build Android APK
 
 on:
   workflow_dispatch:
@@ -6,21 +6,36 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
+
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
+
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
-    - name: Build with Gradle
+
+    - name: Create missing files (if any)
       run: |
-        chmod +x gradlew
-        ./gradlew :app:assembleDebug
+        # إنشاء gradle.properties إذا لم يكن موجوداً
+        if [ ! -f gradle.properties ]; then
+          echo "org.gradle.jvmargs=-Xmx2048m" > gradle.properties
+          echo "android.useAndroidX=true" >> gradle.properties
+          echo "android.enableJetifier=true" >> gradle.properties
+        fi
+
+    - name: Build with Gradle (using gradle command directly)
+      run: |
+        # استخدام gradle المثبت عبر setup-java بدلاً من gradlew
+        gradle :app:assembleDebug --stacktrace
+
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
-        path: app/build/outputs/apk/debug/app-debug.apk
+        path: app/build/outputs/apk/debug/*.apk
